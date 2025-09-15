@@ -1,8 +1,8 @@
 local RestrictorFile = "restrictor_settings.txt"
 
 -- Branding Options
-local RestrictorCategory = "Restrictor"
-local RestrictorSubName = "Settings"
+local RestrictorCategory = "Excelsus"
+local RestrictorSubName = "Restrictor"
 
 if SERVER then
     util.AddNetworkString("bb_cannotspawn")
@@ -135,7 +135,7 @@ if CLIENT then
     -- TOOLMENU PANEL
     -- ==========================
     hook.Add("PopulateToolMenu", "RestrictorOptions", function()
-        spawnmenu.AddToolMenuOption("Options", RestrictorCategory, "Settings", RestrictorSubName, "", "", function(panel)
+        spawnmenu.AddToolMenuOption("Options", RestrictorCategory, "RestrictorPanel", RestrictorSubName, "", "", function(panel)
             panel:ClearControls()
 
             local btn = vgui.Create("DButton", panel)
