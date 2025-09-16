@@ -1,5 +1,5 @@
 -- Branding / UI
-local PanelCategory = "Excelsus"
+local PanelTab = "Excelsus"
 local PanelCategory = "Options"
 local PanelName = "Limiter"
 
