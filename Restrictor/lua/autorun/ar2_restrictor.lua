@@ -7,7 +7,7 @@ local PanelName = "AR2 & Medkit"
 local CONFIG_FILE = "ar2_altfire_settings.txt"
 local DEFAULT_SETTINGS = {
     pickup_cooldown = 5,
-    medkit_cooldown = 5, -- seconds after damage to block medkit pickups
+    medkit_cooldown = 5,
     alt_ammo_entities = {
         {class = "item_ammo_ar2_altfire", ammo_type = "AR2AltFire", amount = 3},
         {class = "item_ammo_smg1_grenade", ammo_type = "SMG1AltFire", amount = 3}
@@ -163,20 +163,22 @@ if SERVER then
         local newMed = net.ReadInt(16)
         local newTable = net.ReadTable()
 
-        -- Update settings immediately
         settings.pickup_cooldown = newPickup
         settings.medkit_cooldown = newMed
         settings.alt_ammo_entities = newTable
-
-        -- Persist to file
         SaveSettings(settings)
 
-        -- Optionally, broadcast to all admins so they have updated client-side table
+        -- Clamp all players to new limits immediately
+        for _, p in ipairs(player.GetAll()) do
+            ClampPlayerAmmo(p)
+        end
+
+        -- Broadcast updated table to all admins
         for _, p in ipairs(player.GetAll()) do
             if p:IsSuperAdmin() then
                 net.Start("Excelsus_SendSettings")
-                    net.WriteInt(settings.pickup_cooldown, 16)
-                    net.WriteInt(settings.medkit_cooldown, 16)
+                    net.WriteInt(settings.pickup_cooldown,16)
+                    net.WriteInt(settings.medkit_cooldown,16)
                     net.WriteTable(settings.alt_ammo_entities)
                 net.Send(p)
             end
@@ -185,372 +187,212 @@ if SERVER then
 end
 
 if CLIENT then
-    -- Table to store active HUD messages
     local HUDMessages = {}
 
-    -- Receive server notifications
+    -- HUD Notifications
     net.Receive("Excelsus_Notify", function()
         local msg = net.ReadString()
-        table.insert(HUDMessages, {
-            text = msg,
-            expire = CurTime() + 3 -- Message duration in seconds
-        })
+        table.insert(HUDMessages, {text = msg, expire = CurTime() + 3})
     end)
 
-    -- Draw HUD messages at bottom-center
     hook.Add("HUDPaint", "Excelsus_HUDMessages", function()
         if #HUDMessages == 0 then return end
-
         local scrW, scrH = ScrW(), ScrH()
-        local x = scrW / 2
-        local y = scrH - 100 -- Approximate center-bottom
+        local x, y = scrW/2, scrH-100
 
-        for i = #HUDMessages, 1, -1 do
+        for i=#HUDMessages,1,-1 do
             local msg = HUDMessages[i]
             local remaining = msg.expire - CurTime()
             if remaining <= 0 then
                 table.remove(HUDMessages, i)
             else
-                local alpha = math.min(255, math.max(0, remaining / 3 * 255))
-                draw.SimpleTextOutlined(
-                    msg.text,
-                    "DermaDefaultBold",
-                    x, y,
-                    Color(255,255,255,alpha),
-                    TEXT_ALIGN_CENTER,
-                    TEXT_ALIGN_CENTER,
-                    2,
-                    Color(0,0,0,alpha)
-                )
-                y = y - 24 -- Stack messages upwards
+                local alpha = math.min(255, math.max(0, remaining/3*255))
+                draw.SimpleTextOutlined(msg.text, "DermaDefaultBold", x, y, Color(255,255,255,alpha),
+                    TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 2, Color(0,0,0,alpha))
+                y = y - 24
             end
         end
     end)
 
-    -- Client-side settings mirror (initially copy defaults)
     local clientSettings = table.Copy(DEFAULT_SETTINGS)
 
-    -- Receive server settings
     net.Receive("Excelsus_SendSettings", function()
         clientSettings.pickup_cooldown = net.ReadInt(16)
         clientSettings.medkit_cooldown = net.ReadInt(16)
         clientSettings.alt_ammo_entities = net.ReadTable()
     end)
 
-    -- Request server settings helper
     local function RequestServerSettings()
         net.Start("Excelsus_RequestSettings")
         net.SendToServer()
     end
 
-    -- PopulateToolMenu for AR2 & Medkit
+    -- Open Add/Edit sub-panel
+    local function OpenAmmoEntryPopup(list, line)
+        local isNew = not line
+        local frame = vgui.Create("DFrame")
+        frame:SetTitle(isNew and "Add Ammo Entry" or "Edit Ammo Entry")
+        frame:SetSize(420, 160)
+        frame:Center()
+        frame:MakePopup()
+
+        local lblClass = vgui.Create("DLabel", frame)
+        lblClass:SetPos(8,30)
+        lblClass:SetText("Ammo Class:")
+        lblClass:SizeToContents()
+        local teClass = vgui.Create("DTextEntry", frame)
+        teClass:SetPos(120,26)
+        teClass:SetWide(280)
+        teClass:SetText(line and line:GetValue(1) or "")
+
+        local lblType = vgui.Create("DLabel", frame)
+        lblType:SetPos(8,60)
+        lblType:SetText("Ammo Type:")
+        lblType:SizeToContents()
+        local teType = vgui.Create("DTextEntry", frame)
+        teType:SetPos(120,56)
+        teType:SetWide(280)
+        teType:SetText(line and line:GetValue(2) or "")
+
+        local lblAmount = vgui.Create("DLabel", frame)
+        lblAmount:SetPos(8,90)
+        lblAmount:SetText("Amount:")
+        lblAmount:SizeToContents()
+        local teAmount = vgui.Create("DTextEntry", frame)
+        teAmount:SetPos(120,86)
+        teAmount:SetWide(80)
+        teAmount:SetText(line and line:GetValue(3) or "1")
+
+        local btnSave = vgui.Create("DButton", frame)
+        btnSave:SetText(isNew and "Add" or "Save")
+        btnSave:SetPos(320, 120)
+        btnSave:SetWide(80)
+        btnSave.DoClick = function()
+            local class = teClass:GetValue():Trim()
+            local amtype = teType:GetValue():Trim()
+            local amount = tonumber(teAmount:GetValue()) or 1
+            if class == "" or amtype == "" then
+                notification.AddLegacy("Class and Ammo Type required.", NOTIFY_ERROR, 3)
+                return
+            end
+
+            if isNew then
+                list:AddLine(class, amtype, tostring(math.max(0, math.floor(amount))))
+            else
+                line:SetValue(1, class)
+                line:SetValue(2, amtype)
+                line:SetValue(3, tostring(math.max(0, math.floor(amount))))
+            end
+
+            -- Update client table & send to server
+            local updatedTable = {}
+            for _, vline in ipairs(list:GetLines()) do
+                table.insert(updatedTable, {
+                    class = vline:GetValue(1),
+                    ammo_type = vline:GetValue(2),
+                    amount = tonumber(vline:GetValue(3)) or 1
+                })
+            end
+            clientSettings.alt_ammo_entities = updatedTable
+            net.Start("Excelsus_UpdateSettings")
+                net.WriteInt(clientSettings.pickup_cooldown,16)
+                net.WriteInt(clientSettings.medkit_cooldown,16)
+                net.WriteTable(clientSettings.alt_ammo_entities)
+            net.SendToServer()
+
+            frame:Close()
+        end
+    end
+
+    -- Open main table panel
+    local function OpenAmmoTablePanel()
+        local frame = vgui.Create("DFrame")
+        frame:SetTitle("Alt-Ammo Table")
+        frame:SetSize(620, 400)
+        frame:Center()
+        frame:MakePopup()
+
+        local list = vgui.Create("DListView", frame)
+        list:Dock(FILL)
+        list:SetMultiSelect(false)
+        list:AddColumn("Ammo Class"):SetFixedWidth(250)
+        list:AddColumn("Ammo Type"):SetFixedWidth(250)
+        list:AddColumn("Amount")
+
+        local function PopulateList()
+            list:Clear()
+            local entries = clientSettings.alt_ammo_entities or DEFAULT_SETTINGS.alt_ammo_entities
+            for _, row in ipairs(entries) do
+                list:AddLine(row.class or "", row.ammo_type or "", tostring(row.amount or 1))
+            end
+        end
+
+        timer.Simple(0.05, PopulateList)
+        net.Receive("Excelsus_SendSettings", PopulateList)
+
+        -- Right-click row menu: Edit / Remove
+        list.OnRowRightClick = function(lst, idx, row)
+            local menu = DermaMenu()
+            menu:AddOption("Edit", function() OpenAmmoEntryPopup(lst, row) end)
+            menu:AddOption("Remove", function()
+                lst:RemoveLine(idx)
+                local updatedTable = {}
+                for _, vline in ipairs(lst:GetLines()) do
+                    table.insert(updatedTable, {
+                        class = vline:GetValue(1),
+                        ammo_type = vline:GetValue(2),
+                        amount = tonumber(vline:GetValue(3)) or 1
+                    })
+                end
+                clientSettings.alt_ammo_entities = updatedTable
+                net.Start("Excelsus_UpdateSettings")
+                    net.WriteInt(clientSettings.pickup_cooldown,16)
+                    net.WriteInt(clientSettings.medkit_cooldown,16)
+                    net.WriteTable(clientSettings.alt_ammo_entities)
+                net.SendToServer()
+            end)
+            menu:Open()
+        end
+
+        -- Right-click empty space: Add Entry
+        list.OnMousePressed = function(lst, code)
+            if code ~= MOUSE_RIGHT then return end
+
+            -- Check if any row is hovered
+            local hoveringRow = false
+            for _, row in ipairs(lst:GetLines()) do
+                if row:IsHovered() then
+                    hoveringRow = true
+                    break
+                end
+            end
+
+            -- Only show Add menu if no row is hovered
+            if not hoveringRow then
+                local menu = DermaMenu()
+                menu:AddOption("Add Entry", function() OpenAmmoEntryPopup(lst) end)
+                menu:Open()
+            end
+        end
+    end
+
+    -- Main tool menu button
     hook.Add("PopulateToolMenu", "Excelsus_AR2MedkitPanel", function()
         spawnmenu.AddToolMenuOption("Options", PanelCategory, "ExcelsusPanel", PanelName, "", "", function(panel)
             panel:ClearControls()
-
-            -- Only superadmins can edit ammo table
             if not LocalPlayer():IsSuperAdmin() then
                 panel:Help("You must be a superadmin to edit the Ammo Table. Other settings are visible.")
             end
+            panel:Help("Click the button below to edit alt-ammo mappings.")
 
-            -- Panel help
-            panel:Help("Edit alt-ammo mappings and timing rules. Changes are saved to the server live.")
-
-            panel:ControlHelp("") -- spacer
-
-            -- Edit Ammo Table button
-            local editBtn = vgui.Create("DButton", panel)
-            editBtn:Dock(TOP)
-            editBtn:DockMargin(0, 4, 0, 4)
-            editBtn:SetText("Edit Ammo Table")
-            editBtn:SetTall(26)
-            editBtn:SetDisabled(not LocalPlayer():IsSuperAdmin())
-
-            -- Reset Defaults button
-            local resetBtn = vgui.Create("DButton", panel)
-            resetBtn:Dock(TOP)
-            resetBtn:DockMargin(0, 2, 0, 0)
-            resetBtn:SetText("Reset to Defaults")
-            resetBtn:SetTall(26)
-            resetBtn:SetDisabled(not LocalPlayer():IsSuperAdmin())
-
-            -- Request latest settings from server
-            RequestServerSettings()
-
-            -- Reset Defaults behavior
-            resetBtn.DoClick = function()
-                clientSettings = table.Copy(DEFAULT_SETTINGS)
-                net.Start("Excelsus_UpdateSettings")
-                    net.WriteInt(clientSettings.pickup_cooldown, 16)
-                    net.WriteInt(clientSettings.medkit_cooldown, 16)
-                    net.WriteTable(clientSettings.alt_ammo_entities)
-                net.SendToServer()
-            end
-
-            -- Edit Ammo Table GUI
-            editBtn.DoClick = function()
+            local btnOpen = vgui.Create("DButton", panel)
+            btnOpen:Dock(TOP)
+            btnOpen:DockPadding(4, 0, 0, 0)
+            btnOpen:SetText("Edit Ammo Table")
+            btnOpen:SetTall(26)
+            btnOpen.DoClick = function()
                 RequestServerSettings()
-
-                -- Main editor frame
-                local frame = vgui.Create("DFrame")
-                frame:SetTitle("Alt-Ammo Table & Settings Editor")
-                frame:SetSize(760, 420)
-                frame:Center()
-                frame:MakePopup()
-
-                -- Top numeric settings panel
-                local topPanel = vgui.Create("DPanel", frame)
-                topPanel:Dock(TOP)
-                topPanel:SetTall(64)
-                topPanel:DockPadding(8,8,8,8)
-
-                -- Pickup cooldown
-                local lblPickup = vgui.Create("DLabel", topPanel)
-                lblPickup:SetPos(6, 8)
-                lblPickup:SetText("Pickup Cooldown (s):")
-                lblPickup:SizeToContents()
-                local numPickup = vgui.Create("DTextEntry", topPanel)
-                numPickup:SetPos(150, 4)
-                numPickup:SetWide(100)
-                numPickup:SetText(tostring(clientSettings.pickup_cooldown or DEFAULT_SETTINGS.pickup_cooldown))
-
-                -- Medkit/Armor cooldown
-                local lblMed = vgui.Create("DLabel", topPanel)
-                lblMed:SetPos(270, 8)
-                lblMed:SetText("Medkit/Armor Block After Damage (s):")
-                lblMed:SizeToContents()
-                local numMed = vgui.Create("DTextEntry", topPanel)
-                numMed:SetPos(500, 4)
-                numMed:SetWide(60)
-                numMed:SetText(tostring(clientSettings.medkit_cooldown or DEFAULT_SETTINGS.medkit_cooldown))
-
-                -- Ammo table list view
-                local list = vgui.Create("DListView", frame)
-                list:Dock(FILL)
-                list:SetMultiSelect(false)
-                list:AddColumn("Ammo Class"):SetFixedWidth(320)
-                list:AddColumn("Ammo Type"):SetFixedWidth(240)
-                list:AddColumn("Amount")
-
-                -- Populate list from settings
-                local function PopulateList()
-                    list:Clear()
-                    local entries = clientSettings.alt_ammo_entities or DEFAULT_SETTINGS.alt_ammo_entities
-                    for _, row in ipairs(entries) do
-                        list:AddLine(row.class or "", row.ammo_type or "", tostring(row.amount or 1))
-                    end
-                end
-
-                timer.Simple(0.05, PopulateList)
-                net.Receive("Excelsus_SendSettings", PopulateList)
-
-                -- Right-click row: Edit / Remove
-                list.OnRowRightClick = function(lst, idx, row)
-                    local menu = DermaMenu()
-                    menu:AddOption("Edit", function()
-                        local w,h = 420,160
-                        local sub = vgui.Create("DFrame")
-                        sub:SetTitle("Edit Entry")
-                        sub:SetSize(w,h)
-                        sub:Center()
-                        sub:MakePopup()
-
-                        local lblA = vgui.Create("DLabel", sub)
-                        lblA:SetPos(8,30)
-                        lblA:SetText("Ammo Class:")
-                        lblA:SizeToContents()
-                        local teA = vgui.Create("DTextEntry", sub)
-                        teA:SetPos(120,26)
-                        teA:SetWide(w-140)
-                        teA:SetText(row:GetValue(1))
-
-                        local lblB = vgui.Create("DLabel", sub)
-                        lblB:SetPos(8,60)
-                        lblB:SetText("Ammo Type:")
-                        lblB:SizeToContents()
-                        local teB = vgui.Create("DTextEntry", sub)
-                        teB:SetPos(120,56)
-                        teB:SetWide(w-140)
-                        teB:SetText(row:GetValue(2))
-
-                        local lblC = vgui.Create("DLabel", sub)
-                        lblC:SetPos(8,90)
-                        lblC:SetText("Amount:")
-                        lblC:SizeToContents()
-                        local teC = vgui.Create("DTextEntry", sub)
-                        teC:SetPos(120,86)
-                        teC:SetWide(80)
-                        teC:SetText(row:GetValue(3))
-
-                        local ok = vgui.Create("DButton", sub)
-                        ok:SetText("Save")
-                        ok:SetPos(w-100,h-40)
-                        ok:SetWide(80)
-                        ok.DoClick = function()
-                            local nc = teA:GetValue():Trim()
-                            local na = teB:GetValue():Trim()
-                            local nm = tonumber(teC:GetValue()) or 1
-                            if nc=="" or na=="" then
-                                notification.AddLegacy("Class and Ammo Type required.", NOTIFY_ERROR, 3)
-                                return
-                            end
-                            row:SetValue(1, nc)
-                            row:SetValue(2, na)
-                            row:SetValue(3, tostring(math.max(0, math.floor(nm))))
-
-                            -- Immediately update server with new table
-                            local updatedTable = {}
-                            for _, vline in ipairs(list:GetLines()) do
-                                table.insert(updatedTable, {
-                                    class = vline:GetValue(1),
-                                    ammo_type = vline:GetValue(2),
-                                    amount = tonumber(vline:GetValue(3)) or 1
-                                })
-                            end
-                            clientSettings.alt_ammo_entities = updatedTable
-                            net.Start("Excelsus_UpdateSettings")
-                                net.WriteInt(clientSettings.pickup_cooldown,16)
-                                net.WriteInt(clientSettings.medkit_cooldown,16)
-                                net.WriteTable(clientSettings.alt_ammo_entities)
-                            net.SendToServer()
-
-                            sub:Close()
-                        end
-                    end)
-
-                    menu:AddOption("Remove", function()
-                        if idx then
-                            list:RemoveLine(idx)
-
-                            -- Immediately update server
-                            local updatedTable = {}
-                            for _, vline in ipairs(list:GetLines()) do
-                                table.insert(updatedTable, {
-                                    class = vline:GetValue(1),
-                                    ammo_type = vline:GetValue(2),
-                                    amount = tonumber(vline:GetValue(3)) or 1
-                                })
-                            end
-                            clientSettings.alt_ammo_entities = updatedTable
-                            net.Start("Excelsus_UpdateSettings")
-                                net.WriteInt(clientSettings.pickup_cooldown,16)
-                                net.WriteInt(clientSettings.medkit_cooldown,16)
-                                net.WriteTable(clientSettings.alt_ammo_entities)
-                            net.SendToServer()
-                        end
-                    end)
-
-                    menu:Open()
-                end
-
-                -- Right-click empty space: Add new entry
-                list.OnRowRightClickOutside = function()
-                    local menu = DermaMenu()
-                    menu:AddOption("Add Entry", function()
-                        local w,h = 420,160
-                        local sub = vgui.Create("DFrame")
-                        sub:SetTitle("Add Entry")
-                        sub:SetSize(w,h)
-                        sub:Center()
-                        sub:MakePopup()
-
-                        local lblA = vgui.Create("DLabel", sub)
-                        lblA:SetPos(8,30)
-                        lblA:SetText("Ammo Class:")
-                        lblA:SizeToContents()
-                        local teA = vgui.Create("DTextEntry", sub)
-                        teA:SetPos(120,26)
-                        teA:SetWide(w-140)
-                        teA:SetText("item_ammo_class")
-
-                        local lblB = vgui.Create("DLabel", sub)
-                        lblB:SetPos(8,60)
-                        lblB:SetText("Ammo Type:")
-                        lblB:SizeToContents()
-                        local teB = vgui.Create("DTextEntry", sub)
-                        teB:SetPos(120,56)
-                        teB:SetWide(w-140)
-                        teB:SetText("AMMO_NAME")
-
-                        local lblC = vgui.Create("DLabel", sub)
-                        lblC:SetPos(8,90)
-                        lblC:SetText("Amount:")
-                        lblC:SizeToContents()
-                        local teC = vgui.Create("DTextEntry", sub)
-                        teC:SetPos(120,86)
-                        teC:SetWide(80)
-                        teC:SetText("1")
-
-                        local ok = vgui.Create("DButton", sub)
-                        ok:SetText("Add")
-                        ok:SetPos(w-100,h-40)
-                        ok:SetWide(80)
-                        ok.DoClick = function()
-                            local nc = teA:GetValue():Trim()
-                            local na = teB:GetValue():Trim()
-                            local nm = tonumber(teC:GetValue()) or 1
-                            if nc=="" or na=="" then
-                                notification.AddLegacy("Class and Ammo Type required.", NOTIFY_ERROR, 3)
-                                return
-                            end
-                            list:AddLine(nc, na, tostring(math.max(0, math.floor(nm))))
-
-                            -- Immediately update server
-                            local updatedTable = {}
-                            for _, vline in ipairs(list:GetLines()) do
-                                table.insert(updatedTable, {
-                                    class = vline:GetValue(1),
-                                    ammo_type = vline:GetValue(2),
-                                    amount = tonumber(vline:GetValue(3)) or 1
-                                })
-                            end
-                            clientSettings.alt_ammo_entities = updatedTable
-                            net.Start("Excelsus_UpdateSettings")
-                                net.WriteInt(clientSettings.pickup_cooldown,16)
-                                net.WriteInt(clientSettings.medkit_cooldown,16)
-                                net.WriteTable(clientSettings.alt_ammo_entities)
-                            net.SendToServer()
-
-                            sub:Close()
-                        end
-                    end)
-                    menu:Open()
-                end
-
-                -- Bottom panel: Save & Apply numeric cooldowns
-                local bottom = vgui.Create("DPanel", frame)
-                bottom:Dock(BOTTOM)
-                bottom:SetTall(36)
-                bottom:DockPadding(8,6,8,6)
-
-                local saveBtn = vgui.Create("DButton", bottom)
-                saveBtn:Dock(RIGHT)
-                saveBtn:SetWide(140)
-                saveBtn:SetText("Save & Apply")
-                saveBtn.DoClick = function()
-                    clientSettings.pickup_cooldown = tonumber(numPickup:GetValue()) or DEFAULT_SETTINGS.pickup_cooldown
-                    clientSettings.medkit_cooldown = tonumber(numMed:GetValue()) or DEFAULT_SETTINGS.medkit_cooldown
-
-                    -- Build table from list
-                    local newTable = {}
-                    for _, vline in ipairs(list:GetLines()) do
-                        table.insert(newTable, {
-                            class = vline:GetValue(1),
-                            ammo_type = vline:GetValue(2),
-                            amount = tonumber(vline:GetValue(3)) or 1
-                        })
-                    end
-                    clientSettings.alt_ammo_entities = newTable
-
-                    -- Send updated settings to server
-                    net.Start("Excelsus_UpdateSettings")
-                        net.WriteInt(clientSettings.pickup_cooldown,16)
-                        net.WriteInt(clientSettings.medkit_cooldown,16)
-                        net.WriteTable(clientSettings.alt_ammo_entities)
-                    net.SendToServer()
-
-                    frame:Close()
-                end
+                OpenAmmoTablePanel()
             end
         end)
     end)
