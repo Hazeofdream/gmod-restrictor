@@ -1,6 +1,5 @@
 -- Branding / UI
-local PanelTab = "Excelsus"
-local PanelCategory = "Options"
+local PanelCategory = "Excelsus"
 local PanelName = "Limiter"
 
 -- Persistence
@@ -378,7 +377,7 @@ if CLIENT then
 
     -- Main tool menu button
     hook.Add("PopulateToolMenu", "Excelsus_AR2MedkitPanel", function()
-        spawnmenu.AddToolMenuOption(PanelTab, PanelCategory, "ExcelsusPanel", PanelName, "", "", function(panel)
+        spawnmenu.AddToolMenuOption("Options", PanelCategory, "ExcelsusPanel", PanelName, "", "", function(panel)
             panel:ClearControls()
             if not LocalPlayer():IsSuperAdmin() then
                 panel:Help("You must be a superadmin to edit the Ammo Table. Other settings are visible.")
