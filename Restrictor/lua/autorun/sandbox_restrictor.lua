@@ -1,6 +1,7 @@
 local RestrictorFile = "restrictor_settings.txt"
 -- Branding Options
-local PanelCategory = "Excelsus"
+local PanelTab = "Excelsus"
+local PanelCategory = "Options"
 local PanelName = "Restrictor"
 
 if SERVER then
@@ -336,7 +337,7 @@ if CLIENT then
 
     -- Add button to Options -> Restrictor -> Settings (superadmin only check happens in frame)
     hook.Add("PopulateToolMenu", "RestrictorOptions", function()
-        spawnmenu.AddToolMenuOption("Options", PanelCategory, "RestrictorPanel", PanelName, "", "", function(panel)
+        spawnmenu.AddToolMenuOption(PanelTab, PanelCategory, "RestrictorPanel", PanelName, "", "", function(panel)
             panel:ClearControls()
 
             local btn = vgui.Create("DButton", panel)

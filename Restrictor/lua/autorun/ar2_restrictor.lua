@@ -1,7 +1,7 @@
 -- Branding / UI
-local ServerPrefix = "[Excelsus]"
 local PanelCategory = "Excelsus"
-local PanelName = "AR2 & Medkit"
+local PanelCategory = "Options"
+local PanelName = "Limiter"
 
 -- Persistence
 local CONFIG_FILE = "ar2_altfire_settings.txt"
@@ -378,7 +378,7 @@ if CLIENT then
 
     -- Main tool menu button
     hook.Add("PopulateToolMenu", "Excelsus_AR2MedkitPanel", function()
-        spawnmenu.AddToolMenuOption("Options", PanelCategory, "ExcelsusPanel", PanelName, "", "", function(panel)
+        spawnmenu.AddToolMenuOption(PanelTab, PanelCategory, "ExcelsusPanel", PanelName, "", "", function(panel)
             panel:ClearControls()
             if not LocalPlayer():IsSuperAdmin() then
                 panel:Help("You must be a superadmin to edit the Ammo Table. Other settings are visible.")
