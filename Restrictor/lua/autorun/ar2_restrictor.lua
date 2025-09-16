@@ -8,8 +8,8 @@ local DEFAULT_SETTINGS = {
     pickup_cooldown = 5,
     medkit_cooldown = 5,
     alt_ammo_entities = {
-        {class = "item_ammo_ar2_altfire", ammo_type = "AR2AltFire", amount = 3},
-        {class = "item_ammo_smg1_grenade", ammo_type = "SMG1AltFire", amount = 3}
+        {class = "item_ammo_ar2_altfire", ammo_type = "AR2AltFire", amount = 2},
+        {class = "item_ammo_smg1_grenade", ammo_type = "SMG1_Grenade", amount = 2}
     }
 }
 
