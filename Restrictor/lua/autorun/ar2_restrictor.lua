@@ -384,6 +384,10 @@ if CLIENT then
             end
             panel:Help("Click the button below to edit alt-ammo mappings.")
 
+            local Spacer = vgui.Create("DLabel", panel)
+            Spacer:Dock(TOP)
+            Spacer:SetText("")
+
             local btnOpen = vgui.Create("DButton", panel)
             btnOpen:Dock(TOP)
             btnOpen:DockPadding(4, 0, 0, 0)
