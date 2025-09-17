@@ -183,7 +183,7 @@ if CLIENT then
         Frame:MakePopup()
 
         local List = vgui.Create("DListView", Frame)
-        list:SetMultiSelect(false)
+        List:SetMultiSelect(false)
         List:Dock(FILL)
         List:AddColumn("Class")
         List:AddColumn("Type")
