@@ -305,6 +305,12 @@ if CLIENT then
 
     -- Open main table panel
     local function OpenAmmoTablePanel()
+        if not LocalPlayer():IsSuperAdmin() then
+            notification.AddLegacy("You must be a superadmin to open this menu.", NOTIFY_ERROR, 3)
+            surface.PlaySound("buttons/button10.wav")
+            return
+        end
+
         local frame = vgui.Create("DFrame")
         frame:SetTitle("Alt-Ammo Table")
         frame:SetSize(620, 400)
@@ -379,9 +385,7 @@ if CLIENT then
     hook.Add("PopulateToolMenu", "Excelsus_AR2MedkitPanel", function()
         spawnmenu.AddToolMenuOption("Options", PanelCategory, "ExcelsusPanel", PanelName, "", "", function(panel)
             panel:ClearControls()
-            if not LocalPlayer():IsSuperAdmin() then
-                panel:Help("You must be a superadmin to edit the Ammo Table. Other settings are visible.")
-            end
+
             panel:Help("Click the button below to edit alt-ammo mappings.")
 
             local Spacer = vgui.Create("DLabel", panel)
